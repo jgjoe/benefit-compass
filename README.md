@@ -2,7 +2,7 @@
 
 **공식 정책을 여러 출처에서 질문 한 줄로 찾는 RAG 검색 서비스 — 검색 품질을 직접 만든 평가셋으로 측정합니다**
 
-[![Live](https://img.shields.io/badge/live-demo-success)](https://crushonyou2.github.io/benefit-compass)
+[![Live](https://img.shields.io/badge/live-demo-success)](https://jgjoe.github.io/benefit-compass)
 [![prod-parity recall@1](https://img.shields.io/badge/prod--parity_recall%401-0.233-orange)](#검색-품질을-직접-측정했습니다)
 [![Stack](https://img.shields.io/badge/stack-Spring%20Boot%20%2B%20FastAPI%20%2B%20pgvector-informational)](#아키텍처)
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows)
@@ -15,7 +15,7 @@
 
 > Custom Search 확장의 구현·평가 기록은 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)에서 확인할 수 있습니다. 현재 공개 라이브 데모는 온통청년 + 정부24 통합 코퍼스를 사용하는 production 경로이며, 실제 public rollout 및 운영 topology는 [Public Rollout 기록](docs/P3_PUBLIC_ROLLOUT.md)에 기록되어 있습니다.
 
-**[라이브 데모](https://crushonyou2.github.io/benefit-compass)** — Cloud Run scale-to-zero 구성이라 첫 요청은 인스턴스와 모델을 올리는 시간이 걸립니다.
+**[라이브 데모](https://jgjoe.github.io/benefit-compass)** — Cloud Run scale-to-zero 구성이라 첫 요청은 인스턴스와 모델을 올리는 시간이 걸립니다.
 
 ![월세 지원 질문의 실제 검색 결과](docs/images/search-result.png)
 
@@ -235,7 +235,7 @@ historical 실험 파일(`eval/results_before_expansion.json`, `eval/results_aft
 
 **Jigwan Joe** — Backend · Data
 
-- GitHub: [@crushonyou2](https://github.com/crushonyou2)
+- GitHub: [@jgjoe](https://github.com/jgjoe)
 - Email: jigwan.joe@gmail.com
 
 비영리 학습·포트폴리오 프로젝트입니다. 데이터 출처는 온통청년과 행정안전부 정부24 공공서비스(공공데이터포털)입니다.
