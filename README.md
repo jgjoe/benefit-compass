@@ -38,8 +38,7 @@ production과 같은 검색 조건을 비교하고, **일부 지표가 좋아져
 [`eval/canonical_manifest.json`](eval/canonical_manifest.json)에 보존했습니다.
 
 후속 Retrieval v3에서는 더 강한 사용자 의도 평가 프로그램을 설계했지만 valid canonical dev evaluation까지 도달하지 못했습니다.
-따라서 **v3 성능 결론이나 production 변경은 만들지 않았습니다.** 상세한 과정은
-[historical deep-evidence branch](https://github.com/jgjoe/benefit-compass/tree/codex/retrieval-v3-user-search-quality)에 분리해 보존했습니다.
+따라서 **v3 성능 결론이나 production 변경은 만들지 않았습니다.**
 
 평가를 새로 측정하려면 동일한 DB/corpus 계약을 갖춘 실행 환경이 필요합니다. 저장소의 canonical artifact는
 검증 당시의 기준선과 provenance를 기록한 결과물이며, 저장소만으로 DB-independent replay가 된다고 주장하지 않습니다.
