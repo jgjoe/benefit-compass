@@ -21,78 +21,28 @@
 
 ---
 
-## 검색 품질을 직접 측정했습니다
+## 검색 품질은 측정한 뒤 채택했습니다
 
-RAG는 "그럴듯한 답"이 나오면 잘 되는 것처럼 보입니다. 그래서 **질문 60개에 정답 정책을 라벨링한 평가셋**을
-만들고, 정답이 실제로 상위에 오는지 수치로 확인했습니다.
+RAG는 답변이 그럴듯해 보여도 검색 단계가 틀릴 수 있습니다. 직접 라벨링한 Youth 60문항과 Gov24 21문항으로
+production과 같은 검색 조건을 비교하고, **일부 지표가 좋아져도 다른 필수 지표를 악화시키는 변경은 배포하지 않았습니다.**
 
-### 후보 랭킹 보정
+| 판단 | 결과 |
+|---|---|
+| Gov24 통합 뒤 출처 경쟁 보정 | 현재 평가셋에서 필요한 최소 보정만 적용 |
+| cross-encoder 리랭커 | Gov24 일부 지표는 개선됐지만 Youth Recall@5·@10과 MRR이 악화되어 **No-Go** |
+| 지역 검색 | 원본 지역 데이터 신뢰도가 부족해 public 경로에서 **비노출** |
+| 현재 production | `RERANK=0`, 후보 30개, score cut·만료 제외·지역어 전처리 적용 |
 
-Gov24 10,958건을 추가한 뒤 기존 60문항의 후보 검색 Recall@1은 `0.3167`로 하락했다. 질의에
-`청년`·`대학생`·`사회초년생`이 명시되고 알려진 Gov24 기관명이 없을 때만 `youth` 출처의 거리에
-`0.015`를 보정했다.
+리랭킹은 “얼마나 기여했는가”로 단정하지 않고, **어떤 지표를 개선하고 어떤 지표를 악화시키는지 분리해 측정**했습니다.
+정확한 metric 표, 평가셋, 결과 JSON, 한계는 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)과
+[`eval/canonical_manifest.json`](eval/canonical_manifest.json)에 보존했습니다.
 
-| 평가셋·지표 | 확장 후 무보정 | 최소 보정 후 |
-|---|---:|---:|
-| 기존 60문항 Recall@1 | 0.3167 | **0.3333** |
-| 기존 60문항 Recall@5 | 0.6667 | 0.6667 |
-| 기존 60문항 Recall@10 | 0.7333 | **0.7833** |
-| 기존 60문항 MRR@10 | 0.4560 | **0.4693** |
-| 신규 Gov24 21문항 Recall@1 | 0.2857 | 0.2857 |
-| 신규 Gov24 21문항 Recall@5 | 0.4762 | 0.4762 |
-| 신규 Gov24 21문항 Recall@10 | 0.7143 | 0.7143 |
-| 신규 Gov24 21문항 MRR@10 | 0.3901 | 0.3901 |
+후속 Retrieval v3에서는 더 강한 사용자 의도 평가 프로그램을 설계했지만 valid canonical dev evaluation까지 도달하지 못했습니다.
+따라서 **v3 성능 결론이나 production 변경은 만들지 않았습니다.** 상세한 과정은
+[historical deep-evidence branch](https://github.com/jgjoe/benefit-compass/tree/codex/retrieval-v3-user-search-quality)에 분리해 보존했습니다.
 
-이 표는 source competition만 분리한 후보 랭킹 진단이다. production의 만료 정책 제외,
-지역어 전처리와 score cut을 적용한 배포 정확도로 해석하지 않는다.
-
-### Production-parity 리랭커 평가: No-Go
-
-실제 `/search`와 같은 SQL·질의 전처리·후보 30개·score cut을 공유해 `RERANK=0`과
-`bge-reranker-v2-m3`를 다시 비교했다.
-
-| 평가셋·지표 | `RERANK=0` | `RERANK=1` |
-|---|---:|---:|
-| 기존 60문항 Recall@1 | 0.2000 | **0.2500** |
-| 기존 60문항 Recall@5 | **0.4000** | 0.3333 |
-| 기존 60문항 Recall@10 | **0.4667** | 0.3333 |
-| 기존 60문항 MRR@10 | **0.2881** | 0.2817 |
-| 신규 Gov24 21문항 Recall@1 | 0.2857 | 0.2857 |
-| 신규 Gov24 21문항 Recall@5 | 0.4762 | **0.6190** |
-| 신규 Gov24 21문항 Recall@10 | 0.6190 | 0.6190 |
-| 신규 Gov24 21문항 MRR@10 | 0.3798 | **0.4222** |
-리랭커는 Gov24 21문항 일부 지표를 높였지만 기존 youth 60문항의 Recall@5·@10과 MRR을 악화시켰다.
-따라서 전체 검색에는 채택하지 않았고 배포 구성은 `RERANK=0`을 유지한다. `0.015`도 현재 평가에서
-선택한 최소값일 뿐 일반화된 production 최적값으로 간주하지 않는다. 평가셋·결과 JSON·한계는
-[검증 기록](docs/CUSTOM_SEARCH_MVP.md)에 남겼다.
-
-### Canonical production-parity baseline — P0 동결 (2026-08-29)
-
-현재 production과 동일한 검색 계약(`RERANK=0`, `CANDIDATES=30`, `COSINE_MIN=0.78`, `LEXICAL 0.01`, `strip_region`, 만료 제외)으로 재현한 **현재 기준선**이다. lexical `0 → 0.01` 비교는 `eval/run_eval.py --lexical-bias`로 같은 계약에서 재현했다.
-
-| 평가셋·지표 | lexical `0` | lexical `0.01` (production) |
-|---|---:|---:|
-| 기존 60문항 Recall@1 | 0.2000 | **0.2333** |
-| 기존 60문항 Recall@5 | 0.4000 | **0.4667** |
-| 기존 60문항 Recall@10 | 0.4667 | **0.5167** |
-| 기존 60문항 MRR@10 | 0.2881 | **0.3281** |
-| 신규 Gov24 21문항 Recall@1 | 0.2857 | 0.2857 |
-| 신규 Gov24 21문항 Recall@5 | 0.4762 | **0.7143** |
-| 신규 Gov24 21문항 Recall@10 | 0.6190 | **0.7619** |
-| 신규 Gov24 21문항 MRR@10 | 0.3798 | **0.4222** |
-
-위 수치는 `eval/canonical_youth_production_parity.json`, `eval/canonical_gov24_production_parity.json`에서 재현된다. historical 실험 파일(`results_after_*`, `results_expansion_*`)은 보존했고, 현재 기준선은 `eval/canonical_manifest.json`에서 한 번에 추적한다. `Recall@1 0.40 → 0.52` 같은 과거 수치는 만료/지역어/score cut 없는 후보 진단이므로 production 정확도로 해석하지 않는다.
-
-### Retrieval v3 user-intent evaluation — `INCONCLUSIVE / NO PRODUCTION CHANGE`
-
-후속 v3에서는 대표적인 사용자 의도에서 만족할 만한 정책이 top-5에 들어오는지를 더 강하게 검증하는 평가 프로그램을 설계했다.
-다만 valid canonical dev evaluation까지 도달하지 못했기 때문에 v3 성능 결론을 만들지 않았고, production 검색도 변경하지 않았다.
-현재 공개 서비스는 아래 P0/P3에서 검증한 production baseline을 유지한다.
-상세한 종료 근거와 D-stage 이력은 [historical deep-evidence branch의 closeout 기록](https://github.com/jgjoe/benefit-compass/blob/codex/retrieval-v3-user-search-quality/docs/PROJECT_CLOSEOUT_2026-09-18.md)에 보존했다.
-
-평가셋 생성(`eval/make_evalset.py`)과 측정(`eval/run_eval.py`, `eval/run_eval_rerank.py`) 스크립트,
-평가셋 원본과 측정 결과 JSON을 저장소에 공개했다. 새로 측정하려면 동일한 DB/corpus 계약을 갖춘 실행 환경이 필요하며,
-저장소만으로 DB-independent replay가 검증됐다고 주장하지 않는다.
+평가를 새로 측정하려면 동일한 DB/corpus 계약을 갖춘 실행 환경이 필요합니다. 저장소의 canonical artifact는
+검증 당시의 기준선과 provenance를 기록한 결과물이며, 저장소만으로 DB-independent replay가 된다고 주장하지 않습니다.
 
 **현재 적재 규모**: 온통청년 **2,631건 / 3,083청크** + 정부24 **10,958건 / 14,526청크** = **13,589정책 / 17,609청크**, 임베딩 누락 **0건**입니다.
 
@@ -102,7 +52,7 @@ Gov24 10,958건을 추가한 뒤 기존 60문항의 후보 검색 Recall@1은 `0
 
 검색 결과를 LLM에 통째로 넘기면 품질이 나빠졌을 때 **어디가 문제인지 알 수 없습니다.**
 임베딩 · 벡터검색 · 선택적 리랭킹 · 생성을 단계로 쪼개 두니 단계별로 따로 측정할 수 있었고,
-위 표처럼 "리랭킹이 1순위 정답률에 얼마를 기여하는지"를 분리해 말할 수 있게 됐습니다.
+리랭킹이 어떤 지표를 개선하고 어떤 지표를 악화시키는지 분리해 판단할 수 있었습니다.
 
 ### 답변은 검색된 정책만 근거로 쓴다
 
@@ -214,7 +164,7 @@ cd ../api && set GEMINI_API_KEY=... && gradlew bootRun
 cd ../web && npm install && npm run dev   # http://localhost:5173
 ```
 
-평가 재현 (canonical — 현재 production 계약):
+평가 재측정 (동일 DB/corpus 계약 필요):
 
 ```bash
 python eval/run_data_quality.py
@@ -230,11 +180,12 @@ python eval/run_hard_negative_eval.py --eval-file eval/expansion_api_evalset.jso
 
 historical 실험 파일(`eval/results_before_expansion.json`, `eval/results_after_*` 등)은 보존했다. 상세 계약과 결과 해석은 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)과 `eval/canonical_manifest.json`을 따른다.
 
-저장소에 커밋된 canonical artifact는 clean evaluator commit `58dff80`에서 저장소 밖 임시 디렉터리로 생성해 `git_dirty=false`를 확인한 뒤 `eval/`에 복사했다. 아래 명령을 tracked canonical 경로에 직접 순차 실행하면 지표는 재현되지만, 첫 출력으로 working tree가 변경된 뒤 실행되는 artifact에는 `git_dirty=true`가 기록될 수 있다.
+저장소의 canonical artifact에는 측정 당시의 commit/corpus provenance가 함께 기록되어 있습니다. 같은 지표를 다시 계산하려면
+동일한 DB/corpus 계약이 필요하며, 세부 재현 조건은 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)을 따릅니다.
 
 ## 측정 조건과 범위
 
-- 평가 수치는 직접 라벨링한 기존 60문항과 Gov24 21문항 기준입니다. 표본이 작아 1문항 변화의 유의성을 판단하지 않았습니다. canonical 결과는 `eval/canonical_youth_production_parity.json` 등에서 `generated_at`·`git_commit`·`corpus`와 함께 재현된다.
+- 평가 수치는 직접 라벨링한 기존 60문항과 Gov24 21문항 기준입니다. 표본이 작아 1문항 변화의 유의성을 판단하지 않았습니다. canonical 결과에는 `generated_at`·`git_commit`·`corpus` provenance가 함께 기록되어 있습니다.
 - 공개 경로는 무료 인스턴스의 CPU·메모리 조건에 맞춰 **리랭킹을 끈 구성(`RERANK=0`)으로 배포**했습니다. production-parity 평가에서도 전체 채택 기준을 충족하지 못해 이 구성을 유지한다. canonical baseline은 `RERANK=0`, `CANDIDATES=30`, `COSINE_MIN=0.78`, `LEXICAL 0.01`이다.
 - **지역 검색은 제공하지 않습니다.** 원본 지역코드 품질 문제로 노출을 끊은 상태이며, 데이터 정제나 신뢰할 수 있는 출처 확보가 선행 과제입니다.
 - **코드와 현재 공개 경로는 온통청년 + 정부24 복수 출처를 지원합니다.** production DB에는 정책 13,589건과 청크 17,609건이 있으며, P3 rollout에서 public API의 youth/Gov24 검색 경로를 검증했습니다. 다만 Gov24 21문항 평가는 작은 표본이므로 전반적인 검색 품질 향상을 일반화하지 않습니다. 현재 public rollout 근거는 [Public Rollout 기록](docs/P3_PUBLIC_ROLLOUT.md)을 따릅니다.
