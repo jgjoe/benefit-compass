@@ -1,17 +1,17 @@
 # 혜택나침반 (BenefitCompass)
 
-**공식 정책을 여러 출처에서 질문 한 줄로 찾는 RAG 검색 서비스 — 검색 품질을 직접 만든 평가셋으로 측정합니다**
+**온통청년·정부24의 공식 정책 13,589건을 한 경로에서 검색하고, 검색된 정책만 근거로 답하는 RAG 서비스**
 
 [![Live](https://img.shields.io/badge/live-demo-success)](https://jgjoe.github.io/benefit-compass)
-[![prod-parity recall@1](https://img.shields.io/badge/prod--parity_recall%401-0.233-orange)](#검색-품질을-직접-측정했습니다)
 [![Stack](https://img.shields.io/badge/stack-Spring%20Boot%20%2B%20FastAPI%20%2B%20pgvector-informational)](#아키텍처)
 [![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)](.github/workflows)
 
-정책과 혜택은 여러 공식 출처에 흩어져 있어 **정작 내가 받을 수 있는 게 뭔지 찾기가 어렵습니다.**
-나이와 "월세 지원 받고 싶어" 같은 질문을 넣으면 관련 정책을 찾아 **근거와 함께** 답합니다.
+정책과 혜택은 여러 공식 출처에 흩어져 있어 **정작 내가 받을 수 있는 게 뭔지 찾기 어렵습니다.**
+나이와 "월세 지원 받고 싶어" 같은 질문을 넣으면 관련 정책을 찾고, **검색된 공식 정책만 근거로** 답합니다.
 
-데이터 수집·정제부터 임베딩·벡터검색·리랭킹·답변 생성, 배포와 운영 관측까지 혼자 만들었습니다.
-기존 청년정책 검색은 **직접 만든 60문항 평가셋으로 쟀고**, 행정안전부 정부24 공공서비스 10,958건을 같은 경로에 합쳐 로컬 Neon 적재와 확장 검색 평가까지 완료했습니다.
+개인 프로젝트로 데이터 수집·정제부터 임베딩·벡터검색·답변 생성, 배포와 운영 검증까지 설계·구현·검증했습니다.
+온통청년 2,631건과 정부24 10,958건을 같은 검색·답변 경로에 통합했고, 현재 검증된 corpus는 **정책 13,589건 / 청크 17,609개 / 임베딩 누락 0건**입니다.
+후보 검색·리랭킹·지역 검색은 각각 평가했지만, 근거가 부족하거나 다른 필수 지표를 악화시킨 변경은 production에 넣지 않았습니다.
 
 > Custom Search 확장의 구현·평가 기록은 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)에서 확인할 수 있습니다. 현재 공개 라이브 데모는 온통청년 + 정부24 통합 코퍼스를 사용하는 production 경로이며, 실제 public rollout 및 운영 topology는 [Public Rollout 기록](docs/P3_PUBLIC_ROLLOUT.md)에 기록되어 있습니다.
 
@@ -83,10 +83,18 @@ Gov24 10,958건을 추가한 뒤 기존 60문항의 후보 검색 Recall@1은 `0
 
 위 수치는 `eval/canonical_youth_production_parity.json`, `eval/canonical_gov24_production_parity.json`에서 재현된다. historical 실험 파일(`results_after_*`, `results_expansion_*`)은 보존했고, 현재 기준선은 `eval/canonical_manifest.json`에서 한 번에 추적한다. `Recall@1 0.40 → 0.52` 같은 과거 수치는 만료/지역어/score cut 없는 후보 진단이므로 production 정확도로 해석하지 않는다.
 
-평가셋 생성(`eval/make_evalset.py`)과 측정(`eval/run_eval.py`, `eval/run_eval_rerank.py`) 스크립트,
-평가셋 원본과 측정 결과 JSON을 저장소에 공개했다. 같은 명령으로 다시 잴 수 있다.
+### Retrieval v3 user-intent evaluation — `INCONCLUSIVE / NO PRODUCTION CHANGE`
 
-**적재 규모**: 청년정책 **2,631건**을 정제해 **3,083개 청크**로 적재했고, 임베딩 누락은 **0건**입니다.
+후속 v3에서는 대표적인 사용자 의도에서 만족할 만한 정책이 top-5에 들어오는지를 더 강하게 검증하는 평가 프로그램을 설계했다.
+다만 valid canonical dev evaluation까지 도달하지 못했기 때문에 v3 성능 결론을 만들지 않았고, production 검색도 변경하지 않았다.
+현재 공개 서비스는 아래 P0/P3에서 검증한 production baseline을 유지한다.
+상세한 종료 근거와 D-stage 이력은 [historical deep-evidence branch의 closeout 기록](https://github.com/jgjoe/benefit-compass/blob/codex/retrieval-v3-user-search-quality/docs/PROJECT_CLOSEOUT_2026-09-18.md)에 보존했다.
+
+평가셋 생성(`eval/make_evalset.py`)과 측정(`eval/run_eval.py`, `eval/run_eval_rerank.py`) 스크립트,
+평가셋 원본과 측정 결과 JSON을 저장소에 공개했다. 새로 측정하려면 동일한 DB/corpus 계약을 갖춘 실행 환경이 필요하며,
+저장소만으로 DB-independent replay가 검증됐다고 주장하지 않는다.
+
+**현재 적재 규모**: 온통청년 **2,631건 / 3,083청크** + 정부24 **10,958건 / 14,526청크** = **13,589정책 / 17,609청크**, 임베딩 누락 **0건**입니다.
 
 ## 왜 이렇게 만들었나
 
@@ -139,7 +147,7 @@ ML 라이브러리는 Python 생태계가 편하고 비즈니스 로직은 Sprin
 [Spring Boot API]  ── 요청 검증 · 오케스트레이션 · Gemini 답변 생성
       │  POST /search
       ▼
-[Python FastAPI · ML]  ── e5 질의 임베딩 → pgvector 검색(30) → 선택적 bge 리랭킹 → 임계값 컷
+[Python FastAPI · ML]  ── e5 질의 임베딩 → pgvector 검색(30) → production 보정/score cut (`RERANK=0`)
       │
       ▼
 [Postgres + pgvector (Neon)]   정책 메타(구조화) + 본문 청크 벡터(768d)
