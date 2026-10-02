@@ -19,23 +19,13 @@
 
 ---
 
-## 검색 품질은 측정한 뒤 채택했습니다
+## 주요 기능
 
-RAG는 답변이 그럴듯해 보여도 검색 단계가 틀릴 수 있습니다. 직접 라벨링한 Youth 60문항과 Gov24 21문항으로
-production과 같은 검색 조건을 비교하고, **일부 지표가 좋아져도 다른 필수 지표를 악화시키는 변경은 배포하지 않았습니다.**
+- 나이와 "월세 지원 받고 싶어" 같은 질문으로 온통청년·정부24 공식 정책 13,589건을 한 번에 검색
+- 검색된 공식 정책만 근거로 답하고 정책명을 함께 인용
+- 요청 ID와 Prometheus 지표로 배포 후 지연·무결과를 관측
 
-| 판단 | 결과 |
-|---|---|
-| Gov24 통합 뒤 출처 경쟁 보정 | 현재 평가셋에서 필요한 최소 보정만 적용 |
-| cross-encoder 리랭커 | Gov24 일부 지표는 개선됐지만 Youth Recall@5·@10과 MRR이 악화되어 **No-Go** |
-| 지역 검색 | 원본 지역 데이터 신뢰도가 부족해 public 경로에서 **비노출** |
-| 현재 production | `RERANK=0`, 후보 30개, score cut·만료 제외·지역어 전처리 적용 |
-
-리랭킹은 “얼마나 기여했는가”로 단정하지 않고, **어떤 지표를 개선하고 어떤 지표를 악화시키는지 분리해 측정**했습니다.
-정확한 metric 표, 평가셋, 결과 JSON, 한계는 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)과
-[`eval/canonical_manifest.json`](eval/canonical_manifest.json)에 보존했습니다.
-
-## 왜 이렇게 만들었나
+## 설계 판단
 
 ### RAG를 한 덩어리로 두지 않았다
 
@@ -70,6 +60,45 @@ HTTP API는 `region`이 들어오면 `400 INVALID_REQUEST`로 거절해 믿을 �
 ML 라이브러리는 Python 생태계가 편하고 비즈니스 로직은 Spring Boot가 낫습니다.
 둘을 한 프로세스에 두지 않고 서비스로 나눴습니다.
 
+### 배포 뒤에도 볼 수 있게 했다
+
+배포하고 끝내지 않고 **볼 수 있게** 만들었습니다.
+
+- `/actuator/prometheus` — endpoint·상태 구간별 지연시간, 검색 결과/무결과 수집
+- `/actuator/health` — 배포 상태 확인
+- 모든 API 응답에 `X-Request-ID`를 넣어 장애 로그를 추적
+- **질문 원문과 나이는 로그·메트릭에 저장하지 않습니다** (장애 조사 목적으로도 남기지 않음)
+
+### 콜드스타트를 구간으로 분해했다
+
+요청이 없으면 인스턴스를 내리는 구성에서 첫 요청 지연을 **체감이 아니라 구간별 수치로** 확인했습니다.
+
+1. 요청 ID와 구간 header를 넣어 콜드 경로를 **API↔ML / 모델 준비 / 임베딩 / DB 연결·쿼리 / 생성**으로 분해
+2. 공개 traffic을 바꾸지 않은 **0% revision**에서, 15분 유휴 뒤 before/after를 동시 호출하는 절차로 **5쌍 반복 측정**
+3. 지배 구간은 `api_ml_transport` 중앙값 **26.9초** — ML scale-from-zero + 모델 준비 대기 + 큐. 모델 로딩만 23~24초
+4. 비용이 들지 않는 조치를 적용: `/ready` startup probe로 모델 준비 전 트래픽 차단, 런타임 모델 허브 의존 제거
+
+> 측정 원자료와 운영 문서: [Production Lab 2](docs/operations/PRODUCTION_LAB_2_2026-07-21.md) ·
+> [운영 기준선](docs/operations/BASELINE_2026-07-14.md) · [SLO 초안](docs/operations/SLO.md) · [런북](docs/operations/RUNBOOK.md)
+
+## 검증 결과
+
+### 검색 품질은 측정한 뒤 채택했습니다
+
+RAG는 답변이 그럴듯해 보여도 검색 단계가 틀릴 수 있습니다. 직접 라벨링한 Youth 60문항과 Gov24 21문항으로
+production과 같은 검색 조건을 비교하고, **일부 지표가 좋아져도 다른 필수 지표를 악화시키는 변경은 배포하지 않았습니다.**
+
+| 판단 | 결과 |
+|---|---|
+| Gov24 통합 뒤 출처 경쟁 보정 | 현재 평가셋에서 필요한 최소 보정만 적용 |
+| cross-encoder 리랭커 | Gov24 일부 지표는 개선됐지만 Youth Recall@5·@10과 MRR이 악화되어 **No-Go** |
+| 지역 검색 | 원본 지역 데이터 신뢰도가 부족해 public 경로에서 **비노출** |
+| 현재 production | `RERANK=0`, 후보 30개, score cut·만료 제외·지역어 전처리 적용 |
+
+리랭킹은 “얼마나 기여했는가”로 단정하지 않고, **어떤 지표를 개선하고 어떤 지표를 악화시키는지 분리해 측정**했습니다.
+정확한 metric 표, 평가셋, 결과 JSON, 한계는 [검증 기록](docs/CUSTOM_SEARCH_MVP.md)과
+[`eval/canonical_manifest.json`](eval/canonical_manifest.json)에 보존했습니다.
+
 ## 아키텍처
 
 ```text
@@ -99,28 +128,7 @@ ML 라이브러리는 Python 생태계가 편하고 비즈니스 로직은 Sprin
 | 인프라 | Cloud Run, GitHub Actions, GitHub Pages |
 | 데이터 | 공공데이터포털 온통청년 청년정책 + 행정안전부 정부24 공공서비스(혜택) OpenAPI |
 
-## 운영과 관측
-
-배포하고 끝내지 않고 **볼 수 있게** 만들었습니다.
-
-- `/actuator/prometheus` — endpoint·상태 구간별 지연시간, 검색 결과/무결과 수집
-- `/actuator/health` — 배포 상태 확인
-- 모든 API 응답에 `X-Request-ID`를 넣어 장애 로그를 추적
-- **질문 원문과 나이는 로그·메트릭에 저장하지 않습니다** (장애 조사 목적으로도 남기지 않음)
-
-### 콜드스타트를 구간으로 분해했다
-
-요청이 없으면 인스턴스를 내리는 구성에서 첫 요청 지연을 **체감이 아니라 구간별 수치로** 확인했습니다.
-
-1. 요청 ID와 구간 header를 넣어 콜드 경로를 **API↔ML / 모델 준비 / 임베딩 / DB 연결·쿼리 / 생성**으로 분해
-2. 공개 traffic을 바꾸지 않은 **0% revision**에서, 15분 유휴 뒤 before/after를 동시 호출하는 절차로 **5쌍 반복 측정**
-3. 지배 구간은 `api_ml_transport` 중앙값 **26.9초** — ML scale-from-zero + 모델 준비 대기 + 큐. 모델 로딩만 23~24초
-4. 비용이 들지 않는 조치를 적용: `/ready` startup probe로 모델 준비 전 트래픽 차단, 런타임 모델 허브 의존 제거
-
-> 측정 원자료와 운영 문서: [Production Lab 2](docs/operations/PRODUCTION_LAB_2_2026-07-21.md) ·
-> [운영 기준선](docs/operations/BASELINE_2026-07-14.md) · [SLO 초안](docs/operations/SLO.md) · [런북](docs/operations/RUNBOOK.md)
-
-## 실행 방법
+## 실행
 `.env`에 `DATABASE_URL`(Neon), `YOUTH_API_KEY`, `DATA_GO_KR_KEY`, `GEMINI_API_KEY`가 필요합니다. `GEMINI_MODEL` 미설정 시 `gemini-3.5-flash-lite`가 사용됩니다.
 
 ```bash
